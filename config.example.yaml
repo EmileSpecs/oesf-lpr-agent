@@ -1,0 +1,20 @@
+# Optional defaults. Prefer configuring via the local web UI (http://<lan-ip>:8787).
+# Pairing stores the API key in state.json next to this file — never commit state.json.
+
+oesf:
+  # Public OESF API base (no trailing slash). Can also be set in the UI.
+  api: https://api.oldeastsafetyforum.co.za
+
+# How often to refresh the in-memory plate list from OESF (seconds)
+poll_interval_seconds: 120
+
+# Local pairing UI + camera ingest (Alarm Server → /camera/lpr/:webhookId)
+ui_port: 8787
+
+# Legacy: also push the blacklist to cameras via ISAPI (not needed in filter mode)
+push_blacklist_to_cameras: false
+
+# Packaged builds auto-update from GitHub Releases (EmileSpecs/oesf-lpr-agent).
+# Disable with check_updates: false or env OESF_LPR_AGENT_NO_UPDATE=1
+check_updates: true
+# update_repo: EmileSpecs/oesf-lpr-agent

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OESF LPR Site Agent</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #111; background: #f4f4f5; }
+    body { margin: 0; padding: 1.5rem; max-width: 52rem; }
+    .brand { display: flex; align-items: center; gap: 0.85rem; margin-bottom: 0.35rem; }
+    .brand img { height: 2.75rem; width: auto; display: block; }
+    h1 { font-size: 1.35rem; margin: 0; }
+    h2 { font-size: 1rem; margin: 0 0 0.75rem; }
+    .muted { color: #71717a; font-size: 0.875rem; }
+    .card { background: #fff; border: 1px solid #e4e4e7; border-radius: 0.75rem; padding: 1.25rem; margin: 1rem 0; }
+    .code { font-family: ui-monospace, monospace; font-size: 2rem; letter-spacing: 0.2em; font-weight: 700; }
+    .mono { font-family: ui-monospace, monospace; font-size: 0.75rem; word-break: break-all; }
+    label { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #71717a; margin-bottom: 0.25rem; }
+    input, select, button { font: inherit; }
+    input, select { width: 100%; padding: 0.5rem 0.65rem; border: 1px solid #d4d4d8; border-radius: 0.5rem; box-sizing: border-box; }
+    .row { display: grid; gap: 0.75rem; grid-template-columns: 1fr 1fr; margin-bottom: 0.75rem; }
+    @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+    button { background: #18181b; color: #fff; border: 0; border-radius: 0.5rem; padding: 0.55rem 0.9rem; cursor: pointer; }
+    button.secondary { background: #fff; color: #18181b; border: 1px solid #d4d4d8; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    th, td { text-align: left; padding: 0.5rem 0.35rem; border-bottom: 1px solid #e4e4e7; vertical-align: top; }
+    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.75rem; background: #fef3c7; }
+    .badge.ok { background: #dcfce7; }
+    .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; }
+    .err { color: #b91c1c; font-size: 0.875rem; }
+    .url-row { display: flex; gap: 0.35rem; align-items: flex-start; margin: 0.25rem 0; }
+    .url-row input { flex: 1; }
+    .cam-block { padding: 0.75rem 0; border-bottom: 1px solid #e4e4e7; }
+    .cam-block:last-child { border-bottom: 0; }
+  </style>
+</head>
+<body>
+  <div class="brand">
+    <img src="{{LOGO_SRC}}" alt="OESF" width="88" height="44" />
+    <div>
+      <h1>OESF LPR Site Agent</h1>
+      <p class="muted" style="margin:0.15rem 0 0">Caches the plate list locally and forwards only matching camera events to OESF.</p>
+    </div>
+  </div>
+
+  <div class="card" id="pair-card">
+    <div id="pair-pending">
+      <p class="muted">Pairing code — enter this in Admin → Cameras → Sites</p>
+      <p class="code" id="pairing-code">······</p>
+      <p class="muted" id="pair-meta"></p>
+    </div>
+    <div id="pair-claimed" hidden>
+      <span class="badge ok">Claimed</span>
+      <p id="claimed-name" style="margin: 0.5rem 0 0; font-weight: 600;"></p>
+      <p class="muted" id="claimed-meta"></p>
+    </div>
+    <p class="err" id="pair-error"></p>
+  </div>
+
+  <div class="card">
+    <h2>API</h2>
+    <div class="row">
+      <div>
+        <label>OESF API URL</label>
+        <input id="api-url" placeholder="https://api.oldeastsafetyforum.co.za" autocomplete="url" />
+      </div>
+      <div style="display:flex;align-items:flex-end" class="actions">
+        <button type="button" id="btn-save-api">Save &amp; announce</button>
+        <button type="button" class="secondary" id="btn-sync">Refresh plate cache</button>
+      </div>
+    </div>
+    <p class="muted" id="sync-msg"></p>
+    <p class="muted" id="plate-meta"></p>
+    <p class="muted" id="version-meta"></p>
+  </div>
+
+  <div class="card">
+    <h2>Cameras — Alarm Server URLs</h2>
+    <p class="muted">
+      Point each camera’s Alarm Server / HTTP notification at the LAN URL below.
+      The agent filters against the cached plate list and only posts matches to OESF.
+    </p>
+    <div id="cameras"></div>
+  </div>
+
+  <script>
+    let apiUrlDirty = false
+    const apiUrlInput = document.getElementById('api-url')
+    apiUrlInput.addEventListener('input', () => { apiUrlDirty = true })
+    apiUrlInput.addEventListener('change', () => { apiUrlDirty = true })
+
+    async function api (path, opts = {}) {
+      const res = await fetch(path, {
+        headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+        ...opts,
+        body: opts.body ? JSON.stringify(opts.body) : undefined
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || json.message || res.statusText)
+      return json
+    }
+
+    function copyText (text) {
+      navigator.clipboard.writeText(text).catch(() => {
+        const ta = document.createElement('textarea')
+        ta.value = text
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        ta.remove()
+      })
+    }
+
+    function render (state) {
+      if (!apiUrlDirty && document.activeElement !== apiUrlInput) {
+        apiUrlInput.value = state.api_url || ''
+      }
+
+      const pending = document.getElementById('pair-pending')
+      const claimed = document.getElementById('pair-claimed')
+      if (state.api_key && state.status === 'claimed') {
+        pending.hidden = true
+        claimed.hidden = false
+        document.getElementById('claimed-name').textContent = state.name || 'Site agent'
+        document.getElementById('claimed-meta').textContent = state.site_agent_id || ''
+      } else {
+        pending.hidden = false
+        claimed.hidden = true
+        document.getElementById('pairing-code').textContent = state.pairing_code || '—'
+        document.getElementById('pair-meta').textContent = state.pairing_expires_at
+          ? 'Expires ' + new Date(state.pairing_expires_at).toLocaleString()
+          : (state.status || '')
+      }
+
+      const cache = state.plate_cache || {}
+      const stats = state.filter_stats || {}
+      document.getElementById('plate-meta').textContent =
+        `Plate cache: ${cache.count ?? 0}` +
+        (cache.version != null ? ` (v${cache.version})` : '') +
+        ` · forwarded ${stats.forwarded ?? 0} · dropped ${stats.dropped ?? 0}`
+
+      const upd = state.update || {}
+      let updLine = `Agent v${state.version || '?'}`
+      if (upd.status === 'up_to_date') updLine += ' · up to date'
+      else if (upd.status === 'update_available' || upd.status === 'updating') {
+        updLine += ` · updating to v${upd.latest || '?'}`
+      } else if (upd.status === 'error') updLine += ` · update check failed: ${upd.error || 'error'}`
+      else if (upd.status === 'disabled') updLine += ' · auto-update off'
+      else if (upd.status === 'dev') updLine += ' · source build (no auto-update)'
+      else if (upd.status === 'pending') updLine += ' · checking for updates…'
+      document.getElementById('version-meta').textContent = updLine
+
+      const root = document.getElementById('cameras')
+      const cams = state.assigned_cameras || []
+      if (!cams.length) {
+        root.innerHTML = '<p class="muted">No cameras assigned yet. Attach cameras in the portal after claiming.</p>'
+        return
+      }
+
+      root.innerHTML = ''
+      for (const cam of cams) {
+        const block = document.createElement('div')
+        block.className = 'cam-block'
+        const urls = cam.ingest_urls || []
+        const preferred = urls.find((u) => !u.includes('127.0.0.1')) || urls[0] || ''
+        let urlsHtml = ''
+        for (const u of urls) {
+          urlsHtml += `<div class="url-row">
+            <input class="mono" readonly value="${escapeAttr(u)}" />
+            <button type="button" class="secondary" data-copy="${escapeAttr(u)}">Copy</button>
+          </div>`
+        }
+        if (!urlsHtml) {
+          urlsHtml = '<p class="muted">Webhook id not available yet — refresh after the API is updated.</p>'
+        }
+        block.innerHTML = `
+          <strong>${escapeHtml(cam.name || cam.id)}</strong>
+          <div class="muted">${escapeHtml(cam.location || cam.address || '')}</div>
+          <p class="muted" style="margin:0.5rem 0 0.25rem">Alarm Server URL (use a LAN address, not 127.0.0.1, on the camera)</p>
+          ${urlsHtml}
+          ${preferred ? `<p class="muted">Preferred: <span class="mono">${escapeHtml(preferred)}</span></p>` : ''}
+        `
+        root.appendChild(block)
+      }
+      root.querySelectorAll('button[data-copy]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          copyText(btn.getAttribute('data-copy'))
+          btn.textContent = 'Copied'
+          setTimeout(() => { btn.textContent = 'Copy' }, 1000)
+        })
+      })
+    }
+
+    function escapeHtml (s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+    }
+    function escapeAttr (s) { return escapeHtml(s).replace(/`/g, '') }
+
+    async function refresh () {
+      try {
+        const state = await api('/local/state')
+        document.getElementById('pair-error').textContent = ''
+        render(state)
+      } catch (e) {
+        document.getElementById('pair-error').textContent = e.message
+      }
+    }
+
+    document.getElementById('btn-save-api').addEventListener('click', async () => {
+      try {
+        await api('/local/config', { method: 'POST', body: { api_url: apiUrlInput.value.trim() } })
+        apiUrlDirty = false
+        await refresh()
+      } catch (e) {
+        document.getElementById('pair-error').textContent = e.message
+      }
+    })
+
+    document.getElementById('btn-sync').addEventListener('click', async () => {
+      const msg = document.getElementById('sync-msg')
+      msg.textContent = 'Refreshing…'
+      try {
+        const r = await api('/local/sync', { method: 'POST' })
+        msg.textContent = r.message || 'Done'
+        await refresh()
+      } catch (e) {
+        msg.textContent = e.message
+      }
+    })
+
+    refresh()
+    setInterval(refresh, 5000)
+  </script>
+</body>
+</html>

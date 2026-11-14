@@ -1,0 +1,28 @@
+{
+  "name": "oesf-lpr-agent",
+  "version": "0.2.0",
+  "private": true,
+  "description": "OESF LAN site agent — pairs via local UI, pulls plate blacklist, pushes to Hikvision via ISAPI",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "bin": {
+    "oesf-lpr-agent": "./src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "sync-once": "node src/index.js --once",
+    "build": "node scripts/build.mjs",
+    "build:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-installer.ps1"
+  },
+  "dependencies": {
+    "digest-fetch": "^3.1.1",
+    "js-yaml": "^4.1.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.5.1",
+    "esbuild": "^0.25.0"
+  }
+}
