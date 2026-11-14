@@ -160,18 +160,20 @@ export async function checkAndApplyUpdate ({
   if (process.platform === 'win32') {
     const scriptPath = join(dir, 'oesf-lpr-agent-update.cmd')
     writeWindowsReplaceScript({ scriptPath, exePath, newPath, pid })
-    spawn(scriptPath, [], {
+    spawn(process.env.ComSpec || 'cmd.exe', ['/c', scriptPath], {
       detached: true,
       stdio: 'ignore',
       windowsHide: true,
+      cwd: dir,
       env: { ...process.env, OESF_LPR_AGENT_HIDDEN: '1', OESF_LPR_AGENT_NO_OPEN: '1' }
     }).unref()
   } else {
     const scriptPath = join(dir, 'oesf-lpr-agent-update.sh')
     writeLinuxReplaceScript({ scriptPath, exePath, newPath, pid })
-    spawn(scriptPath, [], {
+    spawn('/bin/sh', [scriptPath], {
       detached: true,
       stdio: 'ignore',
+      cwd: dir,
       env: { ...process.env, OESF_LPR_AGENT_HIDDEN: '1', OESF_LPR_AGENT_NO_OPEN: '1' }
     }).unref()
   }
