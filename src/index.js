@@ -19,7 +19,7 @@ import {
 } from './update.js'
 import { startTray, trayEnabledByDefault } from './tray.js'
 
-const VERSION = globalThis.__OESF_AGENT_VERSION__ || '0.4.0'
+const VERSION = globalThis.__OESF_AGENT_VERSION__ || '0.4.1'
 
 function usage () {
   console.log(`oesf-lpr-agent — pair with OESF and push plate blacklists to Hikvision cameras

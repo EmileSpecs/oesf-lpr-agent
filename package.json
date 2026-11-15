@@ -1,6 +1,6 @@
 {
   "name": "oesf-lpr-agent",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "description": "OESF LAN site agent — pairs via local UI, pulls plate blacklist, pushes to Hikvision via ISAPI",
   "type": "module",

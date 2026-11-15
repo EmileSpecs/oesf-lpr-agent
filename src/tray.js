@@ -5,13 +5,16 @@
 import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
-import { createRequire } from 'node:module'
 import { ensureDataDir, isPackaged } from './paths.js'
 
-const require = createRequire(import.meta.url)
-const here = dirname(fileURLToPath(import.meta.url))
+// Packaged builds are esbuild CJS — do not use import.meta / createRequire here.
+function moduleDirname () {
+  if (typeof __dirname !== 'undefined') return __dirname
+  return process.cwd()
+}
+
+const here = moduleDirname()
 
 function helperName () {
   if (process.platform === 'win32') return 'tray_windows_release.exe'
@@ -33,12 +36,6 @@ function candidateHelperPaths (name) {
   paths.push(join(process.cwd(), 'node_modules', 'systray2', 'traybin', name))
   paths.push(join(here, '..', 'node_modules', 'systray2', 'traybin', name))
   paths.push(join(here, '..', 'vendor', 'traybin', name))
-  try {
-    const pkgJson = require.resolve('systray2/package.json')
-    paths.push(join(dirname(pkgJson), 'traybin', name))
-  } catch {
-    /* optional */
-  }
   return paths
 }
 
