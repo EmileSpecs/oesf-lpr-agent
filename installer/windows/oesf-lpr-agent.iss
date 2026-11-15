@@ -25,8 +25,8 @@ WizardStyle=modern
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-UninstallDisplayIcon={app}\{#MyAppExeName}
-SetupIconFile=
+UninstallDisplayIcon={app}\tray.ico
+SetupIconFile=tray.ico
 InfoBeforeFile=
 LicenseFile=
 
@@ -40,13 +40,15 @@ Name: "autostart"; Description: "Start the agent in the background when I log on
 [Files]
 Source: "oesf-lpr-agent.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "config.example.yaml"; DestDir: "{app}"; Flags: ignoreversion
+Source: "tray.ico"; DestDir: "{app}"; Flags: ignoreversion
+Source: "traybin\*"; DestDir: "{app}\traybin"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\tray.ico"
 Name: "{group}\Open local UI"; Filename: "http://127.0.0.1:8787/"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
-Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: autostart
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\tray.ico"; Tasks: desktopicon
+Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\tray.ico"; Tasks: autostart
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent

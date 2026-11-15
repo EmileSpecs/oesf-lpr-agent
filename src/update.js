@@ -66,16 +66,24 @@ function parseSha256Sums (text) {
 }
 
 function writeWindowsReplaceScript ({ scriptPath, exePath, newPath, pid }) {
+  // Quote every path — default install dir is "...\OESF\LPR Agent\..." (spaces).
+  const q = (p) => `"${String(p).replace(/"/g, '')}"`
   const content = `@echo off
 setlocal
+set "OESF_LPR_AGENT_HIDDEN=1"
+set "OESF_LPR_AGENT_NO_OPEN=1"
 :wait
 tasklist /FI "PID eq ${pid}" 2>NUL | find "${pid}" >NUL
 if not errorlevel 1 (
   timeout /t 1 /nobreak >NUL
   goto wait
 )
-move /Y "${newPath}" "${exePath}" >NUL
-start "" /B "${exePath}" --no-open
+move /Y ${q(newPath)} ${q(exePath)} >NUL
+if errorlevel 1 (
+  echo update move failed>> "%~dp0agent-update.log"
+  exit /b 1
+)
+start "" /B ${q(exePath)} --no-open
 del "%~f0"
 `
   writeFileSync(scriptPath, content, 'utf8')

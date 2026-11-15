@@ -2,10 +2,14 @@ OESF LPR Site Agent — Windows
 
 Install (recommended)
   Run oesf-lpr-agent-*-setup-win-x64.exe
-  The agent starts in the background (no console window) and opens
-  http://127.0.0.1:8787 for pairing.
+  The agent starts in the background (no console window), shows a
+  system tray icon, and opens http://127.0.0.1:8787 for pairing.
+
+Tray menu (right-click the notification-area icon)
+  Open agent UI · Restart agent · Quit
 
 Portable
+  Keep traybin\ next to oesf-lpr-agent.exe (included in the zip).
   Run oesf-lpr-agent.exe — it re-launches hidden and exits the console.
   To keep a console for debugging: oesf-lpr-agent.exe --foreground
 
@@ -13,8 +17,8 @@ Portable
     %LOCALAPPDATA%\OESF\LPR Agent\
     agent.log  — runtime log when running in the background
 
-The agent must keep running to sync plates. You do not need a visible
-window; end the oesf-lpr-agent.exe process in Task Manager to stop it.
+The agent must keep running to sync plates. Prefer Quit from the tray
+menu; Task Manager (oesf-lpr-agent.exe) also works.
 
 Pairing
   1. Open the local UI (http://127.0.0.1:8787)
@@ -28,3 +32,4 @@ Optional env
   OESF_LPR_AGENT_CONFIG        override config.yaml path
   OESF_LPR_AGENT_PORT          local UI port (default 8787)
   OESF_LPR_AGENT_FOREGROUND=1  keep console (same as --foreground)
+  OESF_LPR_AGENT_NO_TRAY=1     disable system tray icon

@@ -35,6 +35,21 @@ const logoPath = join(root, 'assets', 'logo.png')
 const logoDataUrl = existsSync(logoPath)
   ? `data:image/png;base64,${readFileSync(logoPath).toString('base64')}`
   : ''
+const trayIcoPath = join(root, 'assets', 'tray.ico')
+const trayIconB64 = existsSync(trayIcoPath)
+  ? readFileSync(trayIcoPath).toString('base64')
+  : (existsSync(logoPath) ? readFileSync(logoPath).toString('base64') : '')
+
+const systrayTraybin = join(root, 'node_modules', 'systray2', 'traybin')
+function copyTrayHelper (destDir, name) {
+  const src = join(systrayTraybin, name)
+  if (!existsSync(src)) {
+    console.warn('⚠ missing tray helper', src)
+    return
+  }
+  mkdirSync(destDir, { recursive: true })
+  cpSync(src, join(destDir, name))
+}
 
 console.log('→ esbuild bundle')
 await esbuild.build({
@@ -46,7 +61,7 @@ await esbuild.build({
   target: 'node20',
   outfile: join(stage, 'agent.cjs'),
   banner: {
-    js: `globalThis.__OESF_UI_HTML__ = ${JSON.stringify(uiHtml)};\nglobalThis.__OESF_LOGO_DATA_URL__ = ${JSON.stringify(logoDataUrl)};\nglobalThis.__OESF_AGENT_VERSION__ = ${JSON.stringify(version)};\nprocess.env.OESF_LPR_AGENT_PACKAGED = process.env.OESF_LPR_AGENT_PACKAGED || '1';`
+    js: `globalThis.__OESF_UI_HTML__ = ${JSON.stringify(uiHtml)};\nglobalThis.__OESF_LOGO_DATA_URL__ = ${JSON.stringify(logoDataUrl)};\nglobalThis.__OESF_TRAY_ICON_B64__ = ${JSON.stringify(trayIconB64)};\nglobalThis.__OESF_AGENT_VERSION__ = ${JSON.stringify(version)};\nprocess.env.OESF_LPR_AGENT_PACKAGED = process.env.OESF_LPR_AGENT_PACKAGED || '1';`
   },
   // Node 20+ has global fetch; digest-fetch only dynamically imports node-fetch as a fallback.
   plugins: [
@@ -67,9 +82,21 @@ await esbuild.build({
   logLevel: 'info'
 })
 
+// Tray helpers must live next to agent.cjs so pkg can snapshot them (spawn copies out at runtime).
+copyTrayHelper(join(stage, 'traybin'), 'tray_windows_release.exe')
+copyTrayHelper(join(stage, 'traybin'), 'tray_linux_release')
+
 writeFileSync(
   join(stage, 'package.json'),
-  JSON.stringify({ name: 'oesf-lpr-agent', version, bin: 'agent.cjs', pkg: { outputPath: binDir } }, null, 2)
+  JSON.stringify({
+    name: 'oesf-lpr-agent',
+    version,
+    bin: 'agent.cjs',
+    pkg: {
+      outputPath: binDir,
+      assets: ['traybin/**/*']
+    }
+  }, null, 2)
 )
 
 console.log('→ pkg win-x64 + linux-x64 (node22)')
@@ -104,10 +131,16 @@ if (linuxSrc && linuxSrc !== linuxOut) {
 }
 
 if (!existsSync(winOut)) console.warn('⚠ Windows binary not found — check pkg output in dist/bin')
-else console.log('✓', winOut)
+else {
+  copyTrayHelper(join(binDir, 'traybin'), 'tray_windows_release.exe')
+  console.log('✓', winOut)
+}
 
 if (!existsSync(linuxOut)) console.warn('⚠ Linux binary not found — check pkg output in dist/bin')
-else console.log('✓', linuxOut)
+else {
+  copyTrayHelper(join(binDir, 'traybin'), 'tray_linux_release')
+  console.log('✓', linuxOut)
+}
 
 // Zip / tar for distribution
 async function zipWin () {
@@ -116,6 +149,10 @@ async function zipWin () {
   rmSync(zipDir, { recursive: true, force: true })
   mkdirSync(zipDir, { recursive: true })
   cpSync(winOut, join(zipDir, 'oesf-lpr-agent.exe'))
+  copyTrayHelper(join(zipDir, 'traybin'), 'tray_windows_release.exe')
+  if (existsSync(trayIcoPath)) cpSync(trayIcoPath, join(zipDir, 'tray.ico'))
+  const trayPngPath = join(root, 'assets', 'tray.png')
+  if (existsSync(trayPngPath)) cpSync(trayPngPath, join(zipDir, 'tray.png'))
   cpSync(join(root, 'config.example.yaml'), join(zipDir, 'config.example.yaml'))
   cpSync(join(root, 'installer', 'windows', 'README-WINDOWS.txt'), join(zipDir, 'README.txt'))
   const zipPath = join(dist, `oesf-lpr-agent-${version}-win-x64.zip`)
@@ -137,6 +174,7 @@ async function tarLinux () {
   rmSync(tarDir, { recursive: true, force: true })
   mkdirSync(tarDir, { recursive: true })
   cpSync(linuxOut, join(tarDir, 'oesf-lpr-agent'))
+  copyTrayHelper(join(tarDir, 'traybin'), 'tray_linux_release')
   cpSync(join(root, 'config.example.yaml'), join(tarDir, 'config.example.yaml'))
   cpSync(join(root, 'installer', 'linux', 'install.sh'), join(tarDir, 'install.sh'))
   cpSync(join(root, 'installer', 'linux', 'README-LINUX.txt'), join(tarDir, 'README.txt'))
@@ -160,6 +198,10 @@ rmSync(issStage, { recursive: true, force: true })
 mkdirSync(issStage, { recursive: true })
 if (existsSync(winOut)) {
   cpSync(winOut, join(issStage, 'oesf-lpr-agent.exe'))
+  copyTrayHelper(join(issStage, 'traybin'), 'tray_windows_release.exe')
+  if (existsSync(trayIcoPath)) cpSync(trayIcoPath, join(issStage, 'tray.ico'))
+  const trayPngIss = join(root, 'assets', 'tray.png')
+  if (existsSync(trayPngIss)) cpSync(trayPngIss, join(issStage, 'tray.png'))
   cpSync(join(root, 'config.example.yaml'), join(issStage, 'config.example.yaml'))
   let iss = readFileSync(join(root, 'installer', 'windows', 'oesf-lpr-agent.iss'), 'utf8')
   iss = iss.replaceAll('{{VERSION}}', version)

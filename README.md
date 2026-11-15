@@ -12,12 +12,14 @@ Download the latest release assets (Windows setup / portable zip, or Linux tarba
 ### Windows
 
 1. Run `oesf-lpr-agent-*-setup-win-x64.exe` (or extract the portable zip and run `oesf-lpr-agent.exe`).
-2. The agent starts **in the background** (no console) and opens **http://127.0.0.1:8787**.
+2. The agent starts **in the background** (no console), shows a **system tray** icon, and opens **http://127.0.0.1:8787**.
 3. Pair in the portal (below).
 
 Config, state, and `agent.log` live in `%LOCALAPPDATA%\OESF\LPR Agent\`.
 
-Use `--foreground` to keep a console for debugging. Stop from Task Manager (`oesf-lpr-agent.exe`) when needed.
+**Tray menu (right-click the icon in the notification area):** Open agent UI · Restart agent · Quit.
+
+Use `--foreground` to keep a console for debugging. Disable the tray with `--no-tray` or `OESF_LPR_AGENT_NO_TRAY=1`.
 
 ### Linux (x86_64)
 
@@ -45,9 +47,9 @@ Source/`npm start` builds do not auto-update.
 
 ## Publishing a release
 
-1. Bump `"version"` in `package.json` (e.g. `0.2.1`).
+1. Bump `"version"` in `package.json` (e.g. `0.4.1`).
 2. Commit and push to `main`.
-3. Tag and push: `git tag v0.2.1 && git push origin v0.2.1`
+3. Tag and push: `git tag v0.4.1 && git push origin v0.4.1`
 4. GitHub Actions builds Windows + Linux binaries, attaches them to the Release (tag must match `package.json` version).
 
 Installed agents pick up the new release automatically.

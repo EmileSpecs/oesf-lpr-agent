@@ -17,14 +17,15 @@ import {
   updateRepoFromConfig,
   updatesEnabled
 } from './update.js'
+import { startTray, trayEnabledByDefault } from './tray.js'
 
-const VERSION = globalThis.__OESF_AGENT_VERSION__ || '0.3.0'
+const VERSION = globalThis.__OESF_AGENT_VERSION__ || '0.4.0'
 
 function usage () {
   console.log(`oesf-lpr-agent — pair with OESF and push plate blacklists to Hikvision cameras
 
 Usage:
-  oesf-lpr-agent [--config path] [--port 8787] [--once] [--no-open] [--foreground]
+  oesf-lpr-agent [--config path] [--port 8787] [--once] [--no-open] [--foreground] [--no-tray]
 
 Env:
   OESF_LPR_AGENT_CONFIG   config file (default: data dir / config.yaml)
@@ -32,8 +33,10 @@ Env:
   OESF_LPR_AGENT_PORT     local UI port (default 8787)
   OESF_API_URL            optional default API base
   OESF_LPR_AGENT_NO_UPDATE=1  disable GitHub auto-update
+  OESF_LPR_AGENT_NO_TRAY=1    disable system tray icon
+  OESF_LPR_AGENT_TRAY=1       enable tray when running from source
 
-Windows packaged builds run in the background by default (no console).
+Windows packaged builds run in the background by default (no console) with a tray icon.
 Use --foreground to keep the console window open for debugging.
 `)
 }
@@ -44,6 +47,7 @@ function parseArgs (argv) {
     help: false,
     noOpen: false,
     foreground: false,
+    noTray: false,
     config: process.env.OESF_LPR_AGENT_CONFIG || null,
     port: Number(process.env.OESF_LPR_AGENT_PORT) || 8787
   }
@@ -53,11 +57,27 @@ function parseArgs (argv) {
     else if (a === '--help' || a === '-h') args.help = true
     else if (a === '--no-open') args.noOpen = true
     else if (a === '--foreground') args.foreground = true
+    else if (a === '--no-tray') args.noTray = true
     else if (a === '--config') args.config = argv[++i]
     else if (a.startsWith('--config=')) args.config = a.slice('--config='.length)
     else if (a === '--port') args.port = Number(argv[++i]) || args.port
   }
   return args
+}
+
+function restartAgentProcess () {
+  const childEnv = {
+    ...process.env,
+    OESF_LPR_AGENT_HIDDEN: '1',
+    OESF_LPR_AGENT_NO_OPEN: '1'
+  }
+  spawn(process.execPath, process.argv.slice(1), {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+    cwd: process.cwd(),
+    env: childEnv
+  }).unref()
 }
 
 /** Packaged Windows: re-launch hidden so the user does not need a console window. */
@@ -272,6 +292,7 @@ async function main () {
     checked_at: null,
     error: null
   }
+  let trayHandle = null
 
   async function runUpdateCheck () {
     if (!updatesEnabled(config) || !isPackaged()) {
@@ -290,6 +311,11 @@ async function main () {
       updateStatus.checked_at = new Date().toISOString()
       updateStatus.error = null
       if (result.restarting) {
+        try {
+          trayHandle?.kill()
+        } catch {
+          /* ignore */
+        }
         // Give the replace script a moment to spawn, then exit so the file unlocks
         setTimeout(() => process.exit(0), 500)
       }
@@ -627,6 +653,38 @@ async function main () {
   log(`polling every ${config.poll_interval_seconds}s (filter mode${config.push_blacklist_to_cameras ? ' + ISAPI push' : ''})`)
   log(`camera Alarm Server → http://<this-host>:${port}/camera/lpr/<webhook_id>`)
   log(`version ${VERSION}`)
+
+  const wantTray = !args.once && !args.noTray && trayEnabledByDefault()
+  if (wantTray) {
+    try {
+      trayHandle = await startTray({
+        port,
+        log: logger,
+        openUi: () => openBrowser(`http://127.0.0.1:${port}/`),
+        restart: () => {
+          logger.info('tray: restart requested')
+          try {
+            trayHandle?.kill()
+          } catch {
+            /* ignore */
+          }
+          restartAgentProcess()
+          setTimeout(() => process.exit(0), 250)
+        },
+        quit: () => {
+          logger.info('tray: quit requested')
+          try {
+            trayHandle?.kill()
+          } catch {
+            /* ignore */
+          }
+          setTimeout(() => process.exit(0), 100)
+        }
+      })
+    } catch (e) {
+      logger.warn(`tray: ${e.message || e}`)
+    }
+  }
 
   // Auto-update: first check after settle, then every 6 hours
   if (updatesEnabled(config) && isPackaged()) {
