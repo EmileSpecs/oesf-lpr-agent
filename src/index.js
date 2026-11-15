@@ -10,6 +10,7 @@ import { loadState, saveState, statePath as resolveStatePath } from './state.js'
 import { syncPlateList } from './sync.js'
 import { createPlateStore } from './plates.js'
 import { classifyLprBody, decideForward, readRawBody } from './ingestFilter.js'
+import { discoverCameras } from './discover.js'
 import { defaultConfigPath, ensureDataDir, isPackaged } from './paths.js'
 import {
   checkAndApplyUpdate,
@@ -17,7 +18,7 @@ import {
   updatesEnabled
 } from './update.js'
 
-const VERSION = globalThis.__OESF_AGENT_VERSION__ || '0.2.0'
+const VERSION = globalThis.__OESF_AGENT_VERSION__ || '0.3.0'
 
 function usage () {
   console.log(`oesf-lpr-agent — pair with OESF and push plate blacklists to Hikvision cameras
@@ -556,6 +557,17 @@ async function main () {
           message: `Plate cache ${result.changed ? 'updated' : 'unchanged'} (${result.count} plates)`,
           ...result
         })
+        return
+      }
+
+      if (req.method === 'POST' && url.pathname === '/local/discover') {
+        const body = await readJson(req).catch(() => ({}))
+        const timeoutMs = Number(body.timeout_ms) > 0 ? Number(body.timeout_ms) : 3000
+        const scanSubnet = body.scan_subnet !== false
+        logger.info(`discover: SADP${scanSubnet ? ' + subnet ISAPI scan' : ''}…`)
+        const devices = await discoverCameras({ timeoutMs, scanSubnet })
+        logger.info(`discover: found ${devices.length} device(s)`)
+        send(res, 200, { ok: true, count: devices.length, devices })
         return
       }
 

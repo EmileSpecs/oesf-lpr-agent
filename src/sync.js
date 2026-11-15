@@ -7,7 +7,10 @@ import { pushPlateBlacklist } from './isapi.js'
  */
 export async function syncPlateList (client, state, plateStore, log = console, opts = {}) {
   const pushToCameras = opts.pushToCameras === true
-  const platesRes = await client.getPlates(plateStore.etag || state._etag)
+  // Plate set is in-memory only; state._etag survives restarts. Never send
+  // If-None-Match when the store is empty or a 304 leaves the filter dead.
+  const etag = plateStore.size > 0 ? (plateStore.etag || state._etag) : null
+  const platesRes = await client.getPlates(etag)
   if (platesRes.status === 304) {
     log.info(`plate list unchanged (${plateStore.size} in memory)`)
     return { changed: false, count: plateStore.size }

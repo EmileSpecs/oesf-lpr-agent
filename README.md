@@ -64,6 +64,15 @@ The agent refreshes the plate list from OESF on an interval, keeps it in memory,
 
 Optional legacy ISAPI blacklist push: set `push_blacklist_to_cameras: true` in `config.yaml`.
 
+## LAN camera discovery
+
+The local UI includes **Discover cameras**:
+
+1. **SADP** — Hikvision multicast inquiry (`239.255.255.250:37020`) for model, serial, IP, HTTP port.
+2. **Subnet scan** (optional) — probes the agent’s `/24` for `/ISAPI/System/deviceInfo` on ports 80 and 8000 when multicast is blocked.
+
+Use discovered IPs when setting each camera’s Alarm Server to this agent’s LAN webhook URL.
+
 ## Develop from source
 
 ```bash

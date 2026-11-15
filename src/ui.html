@@ -33,6 +33,20 @@
     .url-row input { flex: 1; }
     .cam-block { padding: 0.75rem 0; border-bottom: 1px solid #e4e4e7; }
     .cam-block:last-child { border-bottom: 0; }
+    details.alt-urls { margin-top: 0.65rem; }
+    details.alt-urls > summary {
+      cursor: pointer; color: #52525b; font-size: 0.875rem; user-select: none;
+      list-style: none; display: flex; align-items: center; gap: 0.35rem;
+    }
+    details.alt-urls > summary::-webkit-details-marker { display: none; }
+    details.alt-urls > summary::before {
+      content: '▸'; display: inline-block; transition: transform 0.12s ease;
+      color: #a1a1aa; font-size: 0.75rem;
+    }
+    details.alt-urls[open] > summary::before { transform: rotate(90deg); }
+    .alt-url { margin: 0.75rem 0 0; padding-top: 0.65rem; border-top: 1px solid #f4f4f5; }
+    .alt-url:first-of-type { margin-top: 0.5rem; }
+    .alt-url .why { margin: 0.2rem 0 0.35rem; color: #71717a; font-size: 0.8rem; line-height: 1.35; }
   </style>
 </head>
 <body>
@@ -76,6 +90,22 @@
   </div>
 
   <div class="card">
+    <h2>LAN camera discovery</h2>
+    <p class="muted">
+      Finds Hikvision-compatible devices via SADP multicast, then optionally scans the local /24 for ISAPI.
+      Use the IPs when configuring each camera’s Alarm Server to point at this agent.
+    </p>
+    <div class="actions" style="margin-top:0">
+      <button type="button" id="btn-discover">Discover cameras</button>
+      <label style="display:flex;align-items:center;gap:0.35rem;text-transform:none;letter-spacing:0;font-size:0.875rem;color:#3f3f46;margin:0">
+        <input type="checkbox" id="discover-scan" checked /> Also scan subnet (slower)
+      </label>
+    </div>
+    <p class="muted" id="discover-msg"></p>
+    <div id="discovered"></div>
+  </div>
+
+  <div class="card">
     <h2>Cameras — Alarm Server URLs</h2>
     <p class="muted">
       Point each camera’s Alarm Server / HTTP notification at the LAN URL below.
@@ -86,6 +116,7 @@
 
   <script>
     let apiUrlDirty = false
+    const openAltUrls = new Set()
     const apiUrlInput = document.getElementById('api-url')
     apiUrlInput.addEventListener('input', () => { apiUrlDirty = true })
     apiUrlInput.addEventListener('change', () => { apiUrlDirty = true })
@@ -110,6 +141,41 @@
         document.execCommand('copy')
         ta.remove()
       })
+    }
+
+    function urlHost (u) {
+      try { return new URL(u).hostname } catch { return '' }
+    }
+
+    function urlKind (u) {
+      const host = urlHost(u)
+      if (!host || host === '127.0.0.1' || host === 'localhost') return 'loopback'
+      if (host.startsWith('169.254.')) return 'linklocal'
+      return 'lan'
+    }
+
+    function pickPreferred (urls) {
+      return urls.find((u) => urlKind(u) === 'lan')
+        || urls.find((u) => urlKind(u) === 'linklocal')
+        || urls[0]
+        || ''
+    }
+
+    function urlWhy (kind) {
+      if (kind === 'loopback') {
+        return 'This PC only — cameras on the network cannot reach 127.0.0.1. Useful for local testing against the agent.'
+      }
+      if (kind === 'linklocal') {
+        return 'Link-local (no DHCP). Use only if the camera and this PC share that isolated adapter link.'
+      }
+      return 'Another LAN address on this PC — use if the preferred NIC is not reachable from the camera.'
+    }
+
+    function urlRowHtml (u) {
+      return `<div class="url-row">
+        <input class="mono" readonly value="${escapeAttr(u)}" />
+        <button type="button" class="secondary" data-copy="${escapeAttr(u)}">Copy</button>
+      </div>`
     }
 
     function render (state) {
@@ -163,26 +229,54 @@
         const block = document.createElement('div')
         block.className = 'cam-block'
         const urls = cam.ingest_urls || []
-        const preferred = urls.find((u) => !u.includes('127.0.0.1')) || urls[0] || ''
-        let urlsHtml = ''
-        for (const u of urls) {
-          urlsHtml += `<div class="url-row">
-            <input class="mono" readonly value="${escapeAttr(u)}" />
-            <button type="button" class="secondary" data-copy="${escapeAttr(u)}">Copy</button>
-          </div>`
+        const preferred = pickPreferred(urls)
+        const others = urls.filter((u) => u !== preferred)
+
+        let bodyHtml = ''
+        if (!preferred) {
+          bodyHtml = '<p class="muted">Webhook id not available yet — refresh after the API is updated.</p>'
+        } else {
+          bodyHtml = `
+            <p class="muted" style="margin:0.5rem 0 0.25rem">Alarm Server URL — paste this into the camera (LAN address)</p>
+            ${urlRowHtml(preferred)}
+          `
+          if (others.length) {
+            const open = openAltUrls.has(cam.id) ? ' open' : ''
+            let altHtml = ''
+            for (const u of others) {
+              const kind = urlKind(u)
+              const label = kind === 'loopback' ? 'This computer (loopback)'
+                : kind === 'linklocal' ? 'Link-local adapter'
+                : 'Other LAN address'
+              altHtml += `<div class="alt-url">
+                <div style="font-size:0.8rem;font-weight:600;color:#3f3f46">${label}</div>
+                <p class="why">${escapeHtml(urlWhy(kind))}</p>
+                ${urlRowHtml(u)}
+              </div>`
+            }
+            bodyHtml += `
+              <details class="alt-urls" data-cam="${escapeAttr(cam.id)}"${open}>
+                <summary>Other addresses (${others.length}) — when to use them</summary>
+                ${altHtml}
+              </details>
+            `
+          }
         }
-        if (!urlsHtml) {
-          urlsHtml = '<p class="muted">Webhook id not available yet — refresh after the API is updated.</p>'
-        }
+
         block.innerHTML = `
           <strong>${escapeHtml(cam.name || cam.id)}</strong>
           <div class="muted">${escapeHtml(cam.location || cam.address || '')}</div>
-          <p class="muted" style="margin:0.5rem 0 0.25rem">Alarm Server URL (use a LAN address, not 127.0.0.1, on the camera)</p>
-          ${urlsHtml}
-          ${preferred ? `<p class="muted">Preferred: <span class="mono">${escapeHtml(preferred)}</span></p>` : ''}
+          ${bodyHtml}
         `
         root.appendChild(block)
       }
+      root.querySelectorAll('details.alt-urls').forEach((el) => {
+        el.addEventListener('toggle', () => {
+          const id = el.getAttribute('data-cam')
+          if (el.open) openAltUrls.add(id)
+          else openAltUrls.delete(id)
+        })
+      })
       root.querySelectorAll('button[data-copy]').forEach((btn) => {
         btn.addEventListener('click', () => {
           copyText(btn.getAttribute('data-copy'))
@@ -226,6 +320,44 @@
         await refresh()
       } catch (e) {
         msg.textContent = e.message
+      }
+    })
+
+    document.getElementById('btn-discover').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-discover')
+      const msg = document.getElementById('discover-msg')
+      const root = document.getElementById('discovered')
+      const scan = document.getElementById('discover-scan').checked
+      btn.disabled = true
+      msg.textContent = scan ? 'Discovering (SADP + subnet scan)…' : 'Discovering (SADP)…'
+      root.innerHTML = ''
+      try {
+        const r = await api('/local/discover', {
+          method: 'POST',
+          body: { scan_subnet: scan, timeout_ms: 3000 }
+        })
+        msg.textContent = `Found ${r.count || 0} device(s)`
+        const devices = r.devices || []
+        if (!devices.length) {
+          root.innerHTML = '<p class="muted">No devices found. Check that cameras are on the same LAN and multicast is allowed, or enable subnet scan.</p>'
+        } else {
+          let html = '<table><thead><tr><th>IP</th><th>HTTP</th><th>Model</th><th>Serial / MAC</th><th>How</th></tr></thead><tbody>'
+          for (const d of devices) {
+            html += `<tr>
+              <td class="mono">${escapeHtml(d.ip)}</td>
+              <td>${escapeHtml(String(d.http_port || 80))}</td>
+              <td>${escapeHtml(d.model || '—')}</td>
+              <td class="mono">${escapeHtml(d.serial || d.mac || '—')}</td>
+              <td>${escapeHtml((d.sources || [d.source]).join(', '))}</td>
+            </tr>`
+          }
+          html += '</tbody></table>'
+          root.innerHTML = html
+        }
+      } catch (e) {
+        msg.textContent = e.message
+      } finally {
+        btn.disabled = false
       }
     })
 
